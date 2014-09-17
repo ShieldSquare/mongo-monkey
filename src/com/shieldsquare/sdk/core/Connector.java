@@ -8,7 +8,6 @@ import org.apache.log4j.Logger;
 import com.mongodb.DB;
 import com.mongodb.DBCollection;
 import com.mongodb.MongoClient;
-import com.shieldsquare.sdk.utils.ReadPropertiesFile;
 
 public class Connector {
 
@@ -16,36 +15,70 @@ public class Connector {
 	private final static Logger logger = Logger.getLogger(Connector.class.getName());
 	
 	/* Mongo details */
-	private static final String mongoHost = ReadPropertiesFile.getProperty("mongo.host");
-	private static final Integer mongoPort = Integer.parseInt(ReadPropertiesFile.getProperty("mongo.port"));
+	private String mongoHost;
+	private Integer mongoPort;
 	
 	/* DB details */
-	private static final String dbName = ReadPropertiesFile.getProperty("db.name");
-	private static String dbCollectionName = ReadPropertiesFile.getProperty("collection.name");
+	private String dbName;
+	private String dbCollectionName;
 	
 	/* Client variables */
-	private static MongoClient mongoClient;
-	private static DB db;
-	private static DBCollection collection;
+	private MongoClient mongoClient;
+	private DB db;
+	private DBCollection collection = null;
 	
 	private static boolean initiated = false;
 	
-	public static void initiateSession(){
+	/**
+	 * 
+	 * @param mongoHost
+	 * @param mongoPort
+	 * @param dbName
+	 * @param dbCollectionName
+	 */
+	public Connector(String mongoHost, Integer mongoPort, String dbName, String dbCollectionName){
+		this.mongoHost = mongoHost;
+		this.mongoPort = mongoPort;
+		this.setDbName(dbName);
+		this.setDbCollectionName(dbCollectionName);
+	}
+	
+	public void initiateSession(){
 
 		try {
 			mongoClient = new MongoClient(mongoHost,mongoPort);
-			db = mongoClient.getDB(dbName);
-			collection = db.getCollection(dbCollectionName);
+			db = mongoClient.getDB(getDbName());
+			collection = db.getCollection(getDbCollectionName());
 			initiated = true;
 		} catch (UnknownHostException uhe) {
 			logger.error("Error connecting to mongo!", uhe);
 		}
 	}
 	
-	public static DBCollection getCollection(){
+	/**
+	 * 
+	 * @return mongo collection
+	 */
+	public DBCollection getCollection(){
 		if(!initiated)
 			initiateSession();
 		return collection;
+	}
+
+	public String getDbCollectionName() {
+		return dbCollectionName;
+	}
+
+	public void setDbCollectionName(String dbCollectionName) {
+		this.dbCollectionName = dbCollectionName;
+	}
+
+	public String getDbName() {
+		return dbName;
+	}
+
+	public void setDbName(String dbName) {
+		this.dbName = dbName;
 	}
 	
 }

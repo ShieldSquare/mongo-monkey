@@ -13,6 +13,7 @@ import com.mongodb.AggregationOutput;
 import com.mongodb.BasicDBObject;
 import com.mongodb.DBCollection;
 import com.mongodb.DBObject;
+import com.shieldsquare.sdk.exceptions.MongoUtilException;
 
 public class Aggregator {
 
@@ -22,7 +23,6 @@ public class Aggregator {
 	 * Defaults
 	 */
 	private int resultLimit = 20;
-	private DBCollection collection = Connector.getCollection();
 	private int sortIndicator = -1;
 	
 	private AggregationOutput output = null;
@@ -30,6 +30,7 @@ public class Aggregator {
 	private Object initMatchFieldValue = null;
 	private String initGroupFieldName = null;
 	private Object initGroupFieldValue = null;
+	private DBCollection collection = null;
 	private boolean queryEditLock = false;
 	
 	DBObject groupFields;
@@ -105,11 +106,11 @@ public class Aggregator {
 	 * @param fieldName
 	 * @param fieldValue
 	 * @return aggregator object
-	 * @throws Exception 
+	 * @throws MongoUtilException 
 	 */
-	public Aggregator addField(DBObject dbObject, String fieldName, Object fieldValue) throws Exception{
+	public Aggregator addField(DBObject dbObject, String fieldName, Object fieldValue) throws MongoUtilException{
 		if(queryEditLock)
-			throw new Exception("Attempt to edit query when locked");
+			throw new MongoUtilException("Attempt to edit query when locked");
 		dbObject.put(fieldName, fieldValue);
 		return this;
 	}
@@ -130,11 +131,11 @@ public class Aggregator {
 	 * 
 	 * @param fieldName
 	 * @param fieldValue
-	 * @throws Exception 
+	 * @throws MongoUtilException 
 	 */
-	public Aggregator addMatchField(String fieldName, Object fieldValue) throws Exception{
+	public Aggregator addMatchField(String fieldName, Object fieldValue) throws MongoUtilException{
 		if(queryEditLock)
-			throw new Exception("Attempt to edit query when locked");
+			throw new MongoUtilException("Attempt to edit query when locked");
 		if(matchList == null)
 			matchList = new ArrayList<BasicDBObject>();
 		matchList.add(new BasicDBObject(fieldName, fieldValue));
@@ -145,11 +146,11 @@ public class Aggregator {
 	 * 
 	 * @param fieldName
 	 * @param fieldValue
-	 * @throws Exception 
+	 * @throws MongoUtilException 
 	 */
-	public void addGroupField(String fieldName, Object fieldValue) throws Exception{
+	public void addGroupField(String fieldName, Object fieldValue) throws MongoUtilException{
 		if(queryEditLock)
-			throw new Exception("Attempt to edit query when locked");
+			throw new MongoUtilException("Attempt to edit query when locked");
 		if(groupFields == null)
 			groupFields = new BasicDBObject(fieldName, fieldValue);
 		else
@@ -161,7 +162,7 @@ public class Aggregator {
 		queryEditLock = true;
 	}
 	
-	private void buildQuery() throws Exception{
+	private void buildQuery() throws MongoUtilException{
 		
 		addMatchField(initMatchFieldName, initMatchFieldValue);
 		addGroupField(initGroupFieldName, initGroupFieldValue);
@@ -174,7 +175,7 @@ public class Aggregator {
 
 		try {
 			buildQuery();
-		} catch (Exception e) {
+		} catch (MongoUtilException e) {
 			logger.error("Query build error!", e);
 		}
 		
@@ -197,7 +198,10 @@ public class Aggregator {
 	 * Returns the DBObjects of aggregation result as an iterator
 	 * @return resultIterator
 	 */
-	public Iterator<DBObject> getIterator(){
+	public Iterator<DBObject> getIterator(DBCollection collection) throws MongoUtilException{
+		this.collection = collection;
+		if(collection == null)
+			throw new MongoUtilException("Unable to get iterator. Invalid collection.");
 		if(output == null)
 			aggregate();
 		return output.results().iterator();
