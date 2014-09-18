@@ -4,10 +4,13 @@ Contributors: Nachi
 package com.shieldsquare.sdk.core;
 
 import java.net.UnknownHostException;
+
 import org.apache.log4j.Logger;
+
 import com.mongodb.DB;
 import com.mongodb.DBCollection;
 import com.mongodb.MongoClient;
+import com.mongodb.ReadPreference;
 
 public class Connector {
 
@@ -27,8 +30,9 @@ public class Connector {
 	private DB db;
 	private DBCollection collection = null;
 	
-	private static boolean initiated = false;
 	
+	private boolean initiated = false;
+	private boolean slaveOk = false;
 	/**
 	 * 
 	 * @param mongoHost
@@ -47,6 +51,8 @@ public class Connector {
 
 		try {
 			mongoClient = new MongoClient(mongoHost,mongoPort);
+			if(isSlaveOk())
+				mongoClient.setReadPreference(ReadPreference.secondaryPreferred());
 			db = mongoClient.getDB(getDbName());
 			collection = db.getCollection(getDbCollectionName());
 			initiated = true;
@@ -79,6 +85,15 @@ public class Connector {
 
 	public void setDbName(String dbName) {
 		this.dbName = dbName;
+	}
+
+	public boolean isSlaveOk() {
+		return slaveOk;
+	}
+
+	public Connector setSlaveOk(boolean slaveOk) {
+		this.slaveOk = slaveOk;
+		return this;
 	}
 	
 }
