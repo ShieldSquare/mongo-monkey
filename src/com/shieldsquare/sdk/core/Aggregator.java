@@ -1,14 +1,12 @@
 /**
 Contributors: Nachi
-*/
+ */
 package com.shieldsquare.sdk.core;
 
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-
 import org.apache.log4j.Logger;
-
 import com.mongodb.AggregationOutput;
 import com.mongodb.BasicDBObject;
 import com.mongodb.DBCollection;
@@ -18,69 +16,56 @@ import com.shieldsquare.sdk.exceptions.MongoUtilException;
 public class Aggregator {
 
 	Logger logger = Logger.getLogger(Aggregator.class);
-	
+
 	/*
 	 * Defaults
 	 */
-	private int resultLimit = 20;
-	private int sortIndicator = -1;
-	
+	private int DEFAULT_RESULT_LIMIT = 20;
+	private int DEFAULT_SORT_INDICATOR = -1;
+	private String DEFAULT_MATCH_OPERATION = "and";
+
 	private AggregationOutput output = null;
 	private String initMatchFieldName = null;
 	private Object initMatchFieldValue = null;
 	private String initGroupFieldName = null;
 	private Object initGroupFieldValue = null;
 	private DBCollection collection = null;
-	private boolean queryEditLock = false;
-	
-	DBObject groupFields;
-	DBObject matchFields;
-	List<DBObject> pipeline = null;
-	List<BasicDBObject> matchList = null;
-	
+
+	private int resultLimit;
+	private String matchOperation;
+	private int sortIndicator;
+
+	private DBObject groupFields;
+	private DBObject matchFields;
+	private List<DBObject> pipeline = null;
+	private List<BasicDBObject> matchList = null;
+
+	private boolean queryCompiled = false;
+
 	/*
 	 * Constructors
 	 */
-	
+
 	/**
 	 * 
-	 * @param matchFieldName
-	 * @param matchFieldValue
-	 * @param groupFieldName
-	 * @param groupFieldValue
-	 * @param sortIndicator
-	 */
-	public Aggregator(String matchFieldName, Object matchFieldValue, 
-			String groupFieldName, Object groupFieldValue, int sortIndicator ) {
-		
-		this.initMatchFieldName=matchFieldName;
-		this.initMatchFieldValue=matchFieldValue;
-		
-		this.initGroupFieldName = groupFieldName;
-		this.initGroupFieldValue = groupFieldValue;
-		
-		this.sortIndicator = sortIndicator;
-		
-	}
-	
-	/**
-	 * 
+	 * @param collection
 	 * @param matchFieldName
 	 * @param matchFieldValue
 	 * @param groupFieldName
 	 * @param groupFieldValue
 	 */
-	public Aggregator(String matchFieldName, Object matchFieldValue, 
+	public Aggregator(DBCollection collection, String matchFieldName, Object matchFieldValue, 
 			String groupFieldName, Object groupFieldValue) {
-		
+		this.collection=collection;
 		this.initMatchFieldName=matchFieldName;
 		this.initMatchFieldValue=matchFieldValue;
-		
 		this.initGroupFieldName = groupFieldName;
 		this.initGroupFieldValue = groupFieldValue;
-		
+		this.matchOperation = DEFAULT_MATCH_OPERATION;
+		this.resultLimit = DEFAULT_RESULT_LIMIT;
+		this.sortIndicator = DEFAULT_SORT_INDICATOR;
 	}
-	
+
 	/**
 	 * Default result limit is 20
 	 * @param aggregator object
@@ -89,7 +74,7 @@ public class Aggregator {
 		this.resultLimit = resultLimit;
 		return this;
 	}
-	
+
 	/**
 	 * 
 	 * @param collection
@@ -99,22 +84,19 @@ public class Aggregator {
 		this.collection=collection;
 		return this;
 	}
-	
+
 	/**
 	 * 
 	 * @param dbObject
 	 * @param fieldName
 	 * @param fieldValue
 	 * @return aggregator object
-	 * @throws MongoUtilException 
 	 */
-	public Aggregator addField(DBObject dbObject, String fieldName, Object fieldValue) throws MongoUtilException{
-		if(queryEditLock)
-			throw new MongoUtilException("Attempt to edit query when locked");
+	public Aggregator addField(DBObject dbObject, String fieldName, Object fieldValue){
 		dbObject.put(fieldName, fieldValue);
 		return this;
 	}
-	
+
 	/**
 	 * 
 	 * @param dbObject
@@ -126,85 +108,99 @@ public class Aggregator {
 		pipeline.add(dbObject);
 		return this;
 	}
-	
+
 	/**
 	 * 
 	 * @param fieldName
 	 * @param fieldValue
-	 * @throws MongoUtilException 
 	 */
-	public Aggregator addMatchField(String fieldName, Object fieldValue) throws MongoUtilException{
-		if(queryEditLock)
-			throw new MongoUtilException("Attempt to edit query when locked");
+	public Aggregator addMatchField(String fieldName, Object fieldValue){
 		if(matchList == null)
 			matchList = new ArrayList<BasicDBObject>();
 		matchList.add(new BasicDBObject(fieldName, fieldValue));
 		return this;
 	}
-	
+
 	/**
 	 * 
 	 * @param fieldName
 	 * @param fieldValue
-	 * @throws MongoUtilException 
 	 */
-	public void addGroupField(String fieldName, Object fieldValue) throws MongoUtilException{
-		if(queryEditLock)
-			throw new MongoUtilException("Attempt to edit query when locked");
+	public void addGroupField(String fieldName, Object fieldValue){
+		if(fieldValue.getClass() != BasicDBObject.class && fieldValue.getClass() != DBObject.class)
+			fieldValue = "$"+fieldValue.toString();
 		if(groupFields == null)
 			groupFields = new BasicDBObject(fieldName, fieldValue);
 		else
 			addField(groupFields, fieldName, fieldValue);
 	}
-	
-	private void compileFields(){
-		matchFields = new BasicDBObject("$and", matchList);
-		queryEditLock = true;
+
+	private void compileQuery(){
+		if(!queryCompiled){
+			matchFields = new BasicDBObject("$"+matchOperation, matchList);
+			queryCompiled = true;
+		}
 	}
-	
-	private void buildQuery() throws MongoUtilException{
-		
+
+	private void buildQuery(){
+		if(queryCompiled)
+			flushQuery();
 		addMatchField(initMatchFieldName, initMatchFieldValue);
 		addGroupField(initGroupFieldName, initGroupFieldValue);
 		addGroupField("count", new BasicDBObject("$sum",1));
-		compileFields();
-		
-	}
-	
-	private void aggregate(){
-
-		try {
-			buildQuery();
-		} catch (MongoUtilException e) {
-			logger.error("Query build error!", e);
-		}
-		
-		DBObject match = new BasicDBObject("$match", matchFields);
-		
-		DBObject group = new BasicDBObject("$group",groupFields);
-		DBObject sort = new BasicDBObject("$sort", new BasicDBObject("count", sortIndicator));
+		compileQuery();
 		DBObject limit = new BasicDBObject("$limit", resultLimit);
-		addAggregationOperation(match);
-		addAggregationOperation(group);
+		addAggregationOperation(new BasicDBObject("$match", matchFields));
+		addAggregationOperation(new BasicDBObject("$group", groupFields));
 		if(sortIndicator != 0)
-			addAggregationOperation(sort);
+			addAggregationOperation(new BasicDBObject("$sort", new BasicDBObject("count", sortIndicator)));
 		addAggregationOperation(limit);
-		
-		output = collection.aggregate(pipeline);
-		queryEditLock = false;
 	}
-	
+
+	private void flushQuery(){
+		matchFields = null;
+		groupFields = null;
+		pipeline = null;
+		queryCompiled = false;
+	}
+
+	private void aggregate(){
+		buildQuery();
+		output = collection.aggregate(pipeline);
+	}
+
 	/**
 	 * Returns the DBObjects of aggregation result as an iterator
 	 * @return resultIterator
 	 */
-	public Iterator<DBObject> getIterator(DBCollection collection) throws MongoUtilException{
-		this.collection = collection;
+	public Iterator<DBObject> getIterator() throws MongoUtilException{
 		if(collection == null)
 			throw new MongoUtilException("Unable to get iterator. Invalid collection.");
-		if(output == null)
-			aggregate();
+		aggregate();
 		return output.results().iterator();
+	}
+
+	/**
+	 * @return the sortIndicator
+	 */
+	public int getSortIndicator() {
+		return sortIndicator;
+	}
+
+	/**
+	 * @param sortIndicator the sortIndicator to set
+	 */
+	public Aggregator setSortIndicator(int sortIndicator) {
+		this.sortIndicator = sortIndicator;
+		return this;
+	}
+
+	/**
+	 * @param matchOperation the aggregationOperation to set
+	 */
+	public Aggregator setMatchOperation(String matchOperation){
+		this.matchOperation = matchOperation;
+		return this;
 	}
 
 }
