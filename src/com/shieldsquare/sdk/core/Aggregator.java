@@ -126,13 +126,14 @@ public class Aggregator {
 	 * @param fieldName
 	 * @param fieldValue
 	 */
-	public void addGroupField(String fieldName, Object fieldValue){
+	public Aggregator addGroupField(String fieldName, Object fieldValue){
 		if(fieldValue.getClass() != BasicDBObject.class && fieldValue.getClass() != DBObject.class)
 			fieldValue = "$"+fieldValue.toString();
 		if(groupFields == null)
 			groupFields = new BasicDBObject(fieldName, fieldValue);
 		else
 			addField(groupFields, fieldName, fieldValue);
+		return this;
 	}
 
 	private void compileQuery(){
